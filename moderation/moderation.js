@@ -29,11 +29,13 @@ async function load() {
   for (const report of data.reports) {
     const card = node('article', ''); card.append(node('h3', `${report.target_type} · ${report.reason}`), node('p', `${report.status} · ${new Date(report.created_at).toLocaleString()}`), node('pre', report.content_snapshot), node('p', report.details || 'No additional details'), node('p', `Content ID: ${report.target_id}`));
     const label = node('label', 'Review notes (required)'); const notes = document.createElement('textarea'); notes.maxLength = 2000; label.append(notes); card.append(label);
-    for (const [title, decision] of [['Start review', 'reviewing'], ['Resolve report', 'resolved'], ['Dismiss report', 'dismissed']]) button(card, title, () => { if (!notes.value.trim()) throw new Error('Add review notes before saving.'); return call({ action: 'report', id: report.id, version: report.status, decision, notes: notes.value }); });
+    for (const [title, decision] of [['Start review', 'reviewing'], ['Keep content / dismiss report', 'dismissed'], [report.target_type === 'profile' ? 'Remove profile text / resolve' : 'Remove content / resolve', 'remove'], ...(report.target_type === 'profile' ? [['Reject reported photo / resolve', 'reject_photo']] : [])]) button(card, title, () => { if (!notes.value.trim()) throw new Error('Add review notes before saving.'); if (['remove', 'reject_photo'].includes(decision) && !window.confirm(`${title}? This changes the reported content and records your decision.`)) return; return call({ action: 'report', id: report.id, version: report.status, decision, notes: notes.value }); });
     $('reports').append(card);
   }
   if (!data.photos.length) $('photos').append(node('p', 'No images awaiting review.'));
   if (!data.reports.length) $('reports').append(node('p', 'No open reports.'));
+  const history = await call({ action: 'history' });
+  $('history').replaceChildren(...history.reports.map((r) => { const card = node('article', ''); card.append(node('h3', `${r.target_type} · ${r.status}`), node('pre', r.content_snapshot), node('p', r.reviewer_notes || 'No notes recorded'), node('p', r.reviewed_at ? new Date(r.reviewed_at).toLocaleString() : '')); return card; }));
   message('Queue updated. Image previews expire after five minutes.');
 }
 $('login').onsubmit = async (event) => {
@@ -47,4 +49,4 @@ $('login').onsubmit = async (event) => {
   } catch (e) { session = null; message(e.message); } finally { submit.disabled = false; }
 };
 $('refresh').onclick = () => load().catch((e) => message(e.message));
-$('logout').onclick = async () => { try { await fetch(`${base}/auth/v1/logout`, { method: 'POST', headers: { apikey: apiKey, authorization: `Bearer ${session.access_token}` } }); } finally { session = null; $('photos').replaceChildren(); $('reports').replaceChildren(); $('workspace').hidden = true; $('logout').hidden = true; $('login').hidden = false; message('Signed out.'); } };
+$('logout').onclick = async () => { try { await fetch(`${base}/auth/v1/logout`, { method: 'POST', headers: { apikey: apiKey, authorization: `Bearer ${session.access_token}` } }); } finally { session = null; $('photos').replaceChildren(); $('reports').replaceChildren(); $('history').replaceChildren(); $('workspace').hidden = true; $('logout').hidden = true; $('login').hidden = false; message('Signed out.'); } };
